@@ -4,6 +4,6 @@
 window.CLOUD_CONFIG = {
   channelId: "3580090",
   readApiKey: "C7LRM24CZWEZ23R3",
-  refreshMs: 15000,
+  refreshMs: 10000,
   apiBase: "https://api.thingspeak.com"
 };

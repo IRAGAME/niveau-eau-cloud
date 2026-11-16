@@ -87,7 +87,7 @@
         <span class="muted">60 dernières mesures · ≈20 min</span>
       </div>
       <canvas id="chart"></canvas>
-      <p class="cloudNote" style="margin-top:12px"><strong>Consultation à distance.</strong> Les réglages et la calibration restent disponibles sur la page locale de l'ESP32.</p>
+      <p class="cloudNote" style="margin-top:12px"><strong>Consultation à distance.</strong> Actualisation toutes les 10 s. Les réglages et la calibration restent disponibles sur la page locale de l'ESP32.</p>
     </article>
   </section>
 </main>
@@ -119,7 +119,7 @@
   var readKey = String(CONFIG.readApiKey || "").trim();
   if (channelId === "REMPLACER_PAR_CHANNEL_ID") channelId = "";
   if (readKey === "REMPLACER_PAR_READ_API_KEY") readKey = "";
-  var refreshMs = Math.max(15000, Number(CONFIG.refreshMs) || 15000);
+  var refreshMs = Math.max(10000, Number(CONFIG.refreshMs) || 10000);
 
   var STATUS = {
     OK:       { color:"#15803d", label:"Niveau normal",   alert:null },
@@ -152,9 +152,18 @@
   }
 
   function getJson(url){
-    return fetch(url, { cache: "no-store" }).then(function(r){
+    var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var options = { cache: "no-store" };
+    var timer = null;
+    if (controller){
+      options.signal = controller.signal;
+      timer = setTimeout(function(){ controller.abort(); }, 8000);
+    }
+    return fetch(url, options).then(function(r){
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
+    }).finally(function(){
+      if (timer) clearTimeout(timer);
     });
   }
 
@@ -282,7 +291,17 @@
       });
   }
 
+  var polling = false;
+  var pollTimer = null;
+
+  function schedulePoll(){
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, refreshMs);
+  }
+
   function poll(){
+    if (polling) return;
+    polling = true;
     getJson(apiUrl("/feeds/last.json"))
       .then(function(f){
         var d = parseFeed(f);
@@ -292,10 +311,18 @@
       .catch(function(){
         setOnline(false);
       })
-      .then(function(){
-        setTimeout(poll, refreshMs);
+      .finally(function(){
+        polling = false;
+        schedulePoll();
       });
   }
+
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden){
+      clearTimeout(pollTimer);
+      poll();
+    }
+  });
 
   // ---------- Graphique ----------
   var canvas = $("#chart");
